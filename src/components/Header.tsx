@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { CATEGORIAS } from '@/lib/mockData';
+import { CATEGORIAS } from '@/lib/videoApi';
 import { PawPrint, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 

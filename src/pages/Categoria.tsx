@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import VideoGrid from '@/components/VideoGrid';
-import { CATEGORIAS } from '@/lib/mockData';
+import { CATEGORIAS } from '@/lib/videoApi';
 
 const Categoria = () => {
   const { slug } = useParams<{ slug: string }>();

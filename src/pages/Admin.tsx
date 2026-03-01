@@ -1,30 +1,71 @@
-import { useState, useMemo } from 'react';
-import { mockVideos, Video, CATEGORIAS } from '@/lib/mockData';
-import { Trash2, Lock, BarChart3, Film, Youtube } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Video } from '@/lib/videoApi';
+import { Trash2, Lock, BarChart3, Film, Youtube, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 
-const ADMIN_PASS = 'admin123';
-
 const Admin = () => {
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  const [videos, setVideos] = useState<Video[]>(mockVideos);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [stats, setStats] = useState({ youtube: 0, reddit: 0, perros: 0, gatos: 0 });
+  const [loading, setLoading] = useState(false);
+  const [storedPassword, setStoredPassword] = useState('');
 
-  const stats = useMemo(() => ({
-    total: videos.length,
-    youtube: videos.filter(v => v.fuente === 'youtube').length,
-    reddit: videos.filter(v => v.fuente === 'reddit').length,
-    porCategoria: CATEGORIAS.slice(1).map(c => ({
-      ...c,
-      count: videos.filter(v => v.categoria === c.slug).length,
-    })),
-  }), [videos]);
+  const loadAdmin = async (pwd: string) => {
+    setLoading(true);
+    try {
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/admin-videos`,
+        {
+          headers: {
+            'Authorization': `Bearer ${anonKey}`,
+            'x-admin-password': pwd,
+          },
+        }
+      );
+      if (!res.ok) {
+        if (res.status === 401) {
+          toast.error('Contraseña incorrecta');
+          setAuthenticated(false);
+          return;
+        }
+        throw new Error('Error al cargar');
+      }
+      const data = await res.json();
+      setVideos(data.videos || []);
+      setStats(data.stats || { youtube: 0, reddit: 0, perros: 0, gatos: 0 });
+      setAuthenticated(true);
+    } catch (e: any) {
+      toast.error(e.message || 'Error de conexión');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const handleDelete = (id: string) => {
-    setVideos(prev => prev.filter(v => v.id !== id));
-    toast.success('Video eliminado');
+  const handleDelete = async (id: string) => {
+    try {
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/admin-videos?id=${id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${anonKey}`,
+            'x-admin-password': storedPassword,
+          },
+        }
+      );
+      if (!res.ok) throw new Error('Error al eliminar');
+      setVideos(prev => prev.filter(v => v.id !== id));
+      toast.success('Video eliminado');
+    } catch {
+      toast.error('Error al eliminar video');
+    }
   };
 
   if (!authenticated) {
@@ -39,11 +80,8 @@ const Admin = () => {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (password === ADMIN_PASS) {
-                setAuthenticated(true);
-              } else {
-                toast.error('Contraseña incorrecta');
-              }
+              setStoredPassword(password);
+              loadAdmin(password);
             }}
             className="flex gap-2"
           >
@@ -54,7 +92,9 @@ const Admin = () => {
               placeholder="Contraseña"
               className="flex-1"
             />
-            <Button type="submit">Entrar</Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Entrar'}
+            </Button>
           </form>
         </div>
       </main>
@@ -73,7 +113,7 @@ const Admin = () => {
         <div className="rounded-xl bg-card p-4 shadow-card">
           <p className="text-xs text-muted-foreground font-medium">Total Videos</p>
           <p className="text-2xl font-bold text-card-foreground flex items-center gap-2">
-            <Film className="h-5 w-5 text-primary" /> {stats.total}
+            <Film className="h-5 w-5 text-primary" /> {videos.length}
           </p>
         </div>
         <div className="rounded-xl bg-card p-4 shadow-card">
@@ -82,12 +122,14 @@ const Admin = () => {
             <Youtube className="h-5 w-5 text-destructive" /> {stats.youtube}
           </p>
         </div>
-        {stats.porCategoria.slice(0, 2).map(c => (
-          <div key={c.slug} className="rounded-xl bg-card p-4 shadow-card">
-            <p className="text-xs text-muted-foreground font-medium">{c.label}</p>
-            <p className="text-2xl font-bold text-card-foreground">{c.emoji} {c.count}</p>
-          </div>
-        ))}
+        <div className="rounded-xl bg-card p-4 shadow-card">
+          <p className="text-xs text-muted-foreground font-medium">Perros</p>
+          <p className="text-2xl font-bold text-card-foreground">🐕 {stats.perros}</p>
+        </div>
+        <div className="rounded-xl bg-card p-4 shadow-card">
+          <p className="text-xs text-muted-foreground font-medium">Gatos</p>
+          <p className="text-2xl font-bold text-card-foreground">🐱 {stats.gatos}</p>
+        </div>
       </div>
 
       {/* Table */}
@@ -102,21 +144,29 @@ const Admin = () => {
             </tr>
           </thead>
           <tbody>
-            {videos.slice(0, 30).map(v => (
-              <tr key={v.id} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
-                <td className="px-4 py-3 text-card-foreground font-medium line-clamp-1 max-w-xs">{v.titulo}</td>
-                <td className="px-4 py-3 hidden sm:table-cell capitalize text-muted-foreground">{v.fuente}</td>
-                <td className="px-4 py-3 hidden md:table-cell capitalize text-muted-foreground">{v.categoria}</td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => handleDelete(v.id)}
-                    className="rounded-lg p-2 text-destructive hover:bg-destructive/10 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+            {videos.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">
+                  No hay videos. Ejecuta la extracción automática primero.
                 </td>
               </tr>
-            ))}
+            ) : (
+              videos.map(v => (
+                <tr key={v.id} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
+                  <td className="px-4 py-3 text-card-foreground font-medium line-clamp-1 max-w-xs">{v.titulo}</td>
+                  <td className="px-4 py-3 hidden sm:table-cell capitalize text-muted-foreground">{v.fuente}</td>
+                  <td className="px-4 py-3 hidden md:table-cell capitalize text-muted-foreground">{v.categoria}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => handleDelete(v.id)}
+                      className="rounded-lg p-2 text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

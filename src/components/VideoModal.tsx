@@ -1,4 +1,4 @@
-import { Video } from '@/lib/mockData';
+import { Video } from '@/lib/videoApi';
 import { X, Youtube } from 'lucide-react';
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
