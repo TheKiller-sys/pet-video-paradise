@@ -1,5 +1,5 @@
 import { Play, Youtube } from 'lucide-react';
-import { Video } from '@/lib/mockData';
+import { Video } from '@/lib/videoApi';
 import { motion } from 'framer-motion';
 
 interface VideoCardProps {
