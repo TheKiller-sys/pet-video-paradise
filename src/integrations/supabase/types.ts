@@ -22,6 +22,7 @@ export type Database = {
           fecha_extraccion: string
           fuente: string
           id: string
+          likes: number
           thumbnail: string | null
           titulo: string
           url: string
@@ -33,6 +34,7 @@ export type Database = {
           fecha_extraccion?: string
           fuente: string
           id?: string
+          likes?: number
           thumbnail?: string | null
           titulo: string
           url: string
@@ -44,6 +46,7 @@ export type Database = {
           fecha_extraccion?: string
           fuente?: string
           id?: string
+          likes?: number
           thumbnail?: string | null
           titulo?: string
           url?: string

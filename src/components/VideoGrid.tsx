@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useInView } from 'react-intersection-observer';
-import { Video, fetchVideos, sampleVideos } from '@/lib/videoApi';
+import { Video, fetchVideos } from '@/lib/videoApi';
 import VideoCard from './VideoCard';
 import VideoModal from './VideoModal';
 import Loader from './Loader';
@@ -22,27 +22,10 @@ const VideoGrid = ({ categoria }: VideoGridProps) => {
     try {
       setLoading(true);
       const data = await fetchVideos(pageNum, PAGE_SIZE, categoria);
-      
-      if (data.videos.length === 0 && pageNum === 1) {
-        // DB empty, show sample data
-        const filtered = categoria && categoria !== 'todos'
-          ? sampleVideos.filter(v => v.categoria === categoria)
-          : sampleVideos;
-        setVideos(filtered);
-        setHasMore(false);
-      } else {
-        setVideos(prev => reset ? data.videos : [...prev, ...data.videos]);
-        setHasMore(pageNum < data.totalPages);
-      }
+      setVideos(prev => reset ? data.videos : [...prev, ...data.videos]);
+      setHasMore(pageNum < data.totalPages);
     } catch {
-      // Fallback to sample data on error
-      if (pageNum === 1) {
-        const filtered = categoria && categoria !== 'todos'
-          ? sampleVideos.filter(v => v.categoria === categoria)
-          : sampleVideos;
-        setVideos(filtered);
-        setHasMore(false);
-      }
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
@@ -79,6 +62,7 @@ const VideoGrid = ({ categoria }: VideoGridProps) => {
       <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
         <span className="text-5xl mb-4">🐾</span>
         <p className="text-lg font-medium">No hay videos en esta categoría</p>
+        <p className="text-sm mt-1">Ejecuta la extracción automática para poblar la base de datos</p>
       </div>
     );
   }
