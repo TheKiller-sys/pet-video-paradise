@@ -15,8 +15,15 @@ Deno.serve(async (req) => {
     const url = new URL(req.url)
     const clave = url.searchParams.get('clave')
     const cronSecret = Deno.env.get('CRON_SECRET')
+    const authHeader = req.headers.get('authorization') || ''
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 
-    if (!cronSecret || clave !== cronSecret) {
+    // Allow access via cron secret OR service role key
+    const isAuthorized =
+      (cronSecret && clave === cronSecret) ||
+      (serviceRoleKey && authHeader === `Bearer ${serviceRoleKey}`)
+
+    if (!isAuthorized) {
       return new Response(JSON.stringify({ error: 'No autorizado' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
