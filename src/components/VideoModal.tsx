@@ -1,16 +1,11 @@
-import { Video } from '@/lib/videoApi';
-import { X, Youtube } from 'lucide-react';
+import { Video, getYouTubeId } from '@/lib/videoApi';
+import { X } from 'lucide-react';
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface VideoModalProps {
   video: Video | null;
   onClose: () => void;
-}
-
-function getYouTubeId(url: string): string | null {
-  const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-  return match ? match[1] : null;
 }
 
 const VideoModal = ({ video, onClose }: VideoModalProps) => {
@@ -59,7 +54,7 @@ const VideoModal = ({ video, onClose }: VideoModalProps) => {
               </button>
             </div>
             <div className="aspect-video w-full bg-foreground/5">
-              {video.fuente === 'youtube' ? (
+              {video.fuente === 'youtube' && getYouTubeId(video.url) ? (
                 <iframe
                   src={`https://www.youtube.com/embed/${getYouTubeId(video.url)}?autoplay=1`}
                   className="h-full w-full"
@@ -67,10 +62,26 @@ const VideoModal = ({ video, onClose }: VideoModalProps) => {
                   allowFullScreen
                   title={video.titulo}
                 />
+              ) : video.fuente === 'reddit' ? (
+                <video
+                  controls
+                  autoPlay
+                  className="h-full w-full"
+                  src={video.url.includes('v.redd.it') ? `${video.url}/DASH_720.mp4` : video.url}
+                >
+                  Tu navegador no soporta la reproducción de video.
+                </video>
               ) : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-muted-foreground">
-                  <Youtube className="h-12 w-12" />
-                  <p className="text-sm">Video de Reddit — reproducción directa no disponible en demo</p>
+                  <p className="text-sm">No se pudo cargar el video</p>
+                  <a
+                    href={video.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline text-sm"
+                  >
+                    Ver en sitio original
+                  </a>
                 </div>
               )}
             </div>

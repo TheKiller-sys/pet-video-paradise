@@ -1,6 +1,8 @@
-import { Play, Youtube } from 'lucide-react';
-import { Video } from '@/lib/videoApi';
+import { Play, Youtube, Heart, Share2 } from 'lucide-react';
+import { Video, likeVideo, saveLikedVideo, getLikedVideos, shareVideo } from '@/lib/videoApi';
 import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 interface VideoCardProps {
   video: Video;
@@ -15,6 +17,41 @@ const RedditIcon = () => (
 );
 
 const VideoCard = ({ video, onPlay, index }: VideoCardProps) => {
+  const [likes, setLikes] = useState(video.likes || 0);
+  const [liked, setLiked] = useState(false);
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => {
+    setLiked(getLikedVideos().has(video.id));
+  }, [video.id]);
+
+  const handleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (liked) return;
+
+    setAnimating(true);
+    setLiked(true);
+    setLikes(prev => prev + 1);
+    saveLikedVideo(video.id);
+
+    try {
+      const newLikes = await likeVideo(video.id);
+      setLikes(newLikes);
+    } catch {
+      // Keep optimistic update
+    }
+
+    setTimeout(() => setAnimating(false), 600);
+  };
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const success = await shareVideo(video);
+    if (success) {
+      toast.success('¡Enlace copiado!');
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -28,7 +65,7 @@ const VideoCard = ({ video, onPlay, index }: VideoCardProps) => {
       >
         <div className="relative overflow-hidden">
           <img
-            src={video.thumbnail}
+            src={video.thumbnail || 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=400&h=300&fit=crop'}
             alt={video.titulo}
             className="w-full object-cover transition-transform duration-500 group-hover:scale-105"
             loading="lazy"
@@ -43,7 +80,7 @@ const VideoCard = ({ video, onPlay, index }: VideoCardProps) => {
           <h3 className="text-sm font-semibold text-card-foreground line-clamp-2 leading-snug">
             {video.titulo}
           </h3>
-          <div className="mt-2 flex items-center gap-1.5">
+          <div className="mt-2 flex items-center justify-between">
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
               video.fuente === 'youtube'
                 ? 'bg-destructive/10 text-destructive'
@@ -52,6 +89,30 @@ const VideoCard = ({ video, onPlay, index }: VideoCardProps) => {
               {video.fuente === 'youtube' ? <Youtube className="h-3 w-3" /> : <RedditIcon />}
               {video.fuente === 'youtube' ? 'YouTube' : 'Reddit'}
             </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleShare}
+                className="flex items-center gap-1 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-secondary-foreground"
+                title="Compartir"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={handleLike}
+                className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-all ${
+                  liked
+                    ? 'text-destructive'
+                    : 'text-muted-foreground hover:text-destructive'
+                }`}
+                title="Me gusta"
+              >
+                <Heart
+                  className={`h-3.5 w-3.5 transition-transform ${animating ? 'scale-125' : ''}`}
+                  fill={liked ? 'currentColor' : 'none'}
+                />
+                {likes > 0 && <span>{likes}</span>}
+              </button>
+            </div>
           </div>
         </div>
       </div>
