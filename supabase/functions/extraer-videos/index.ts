@@ -6,6 +6,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Keywords that MUST appear in title to confirm it's animal content
+const ANIMAL_KEYWORDS = [
+  'dog', 'puppy', 'pup', 'doggo', 'pupper', 'hound', 'retriever', 'labrador', 'corgi', 'husky', 'beagle', 'bulldog', 'poodle', 'shepherd', 'terrier', 'dachshund', 'chihuahua',
+  'cat', 'kitten', 'kitty', 'meow', 'feline', 'tabby', 'calico', 'siamese',
+  'pet', 'pets', 'animal', 'animals', 'mascota', 'mascotas',
+  'hamster', 'rabbit', 'bunny', 'parrot', 'bird', 'turtle', 'fish', 'hedgehog', 'ferret', 'guinea pig', 'duck', 'goose', 'chicken', 'horse', 'pony', 'cow', 'pig', 'goat', 'sheep', 'deer', 'fox', 'raccoon', 'squirrel', 'otter', 'seal', 'penguin', 'koala', 'panda', 'bear', 'monkey', 'elephant', 'lion', 'tiger',
+  'perro', 'gato', 'gatito', 'cachorro', 'conejo', 'pájaro', 'tortuga', 'pez', 'caballo',
+  'cute', 'adorable', 'funny animal', 'aww', 'boop', 'snoot', 'zoomies', 'tippy taps', 'sploot', 'blep', 'mlem',
+]
+
+function isAnimalContent(title: string): boolean {
+  const t = title.toLowerCase()
+  return ANIMAL_KEYWORDS.some(kw => t.includes(kw))
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -16,7 +31,6 @@ Deno.serve(async (req) => {
     const clave = url.searchParams.get('clave')
     const cronSecret = Deno.env.get('CRON_SECRET')
 
-    // If clave is provided, validate it
     if (clave && cronSecret && clave !== cronSecret) {
       return new Response(JSON.stringify({ error: 'Clave incorrecta' }), {
         status: 401,
@@ -29,13 +43,12 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // Extract from Reddit (OAuth) and YouTube (API or RSS) in parallel
     const [redditVideos, youtubeVideos] = await Promise.all([
-      extraerRedditOAuth(),
+      extraerReddit(),
       extraerYouTube(Deno.env.get('YOUTUBE_API_KEY') || ''),
     ])
 
-    console.log(`Extraídos: ${redditVideos.length} de Reddit, ${youtubeVideos.length} de YouTube`)
+    console.log(`Extraídos: ${redditVideos.length} Reddit, ${youtubeVideos.length} YouTube`)
 
     const allVideos = [...redditVideos, ...youtubeVideos]
     let nuevos = 0
@@ -50,19 +63,16 @@ Deno.serve(async (req) => {
 
       if (!existing) {
         const { error } = await supabase.from('videos').insert(video)
-        if (!error) {
-          nuevos++
-        } else {
+        if (!error) nuevos++
+        else {
           errores++
-          if (errores <= 3) console.error('Error insertando:', error.message)
+          if (errores <= 3) console.error('Insert error:', error.message)
         }
       }
     }
 
     return new Response(JSON.stringify({
-      mensaje: 'ok',
-      nuevos,
-      errores,
+      mensaje: 'ok', nuevos, errores,
       total_extraidos: allVideos.length,
       reddit: redditVideos.length,
       youtube: youtubeVideos.length,
@@ -70,7 +80,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error) {
-    console.error('Error en extracción:', error)
+    console.error('Error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -78,64 +88,28 @@ Deno.serve(async (req) => {
   }
 })
 
-// --- Reddit OAuth Scraper ---
-async function extraerRedditOAuth() {
+// --- Reddit ---
+async function extraerReddit() {
   const videos: any[] = []
 
-  // Get OAuth token using application-only auth
-  let accessToken = ''
-  try {
-    const tokenRes = await fetch('https://www.reddit.com/api/v1/access_token', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Basic ' + btoa('JvR5fTn0dfr2WaxcrIk5RA:'),  // Public read-only client
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'web:viralmascotas:v1.0',
-      },
-      body: 'grant_type=client_credentials',
-    })
-
-    if (tokenRes.ok) {
-      const tokenData = await tokenRes.json()
-      accessToken = tokenData.access_token
-      console.log('Reddit OAuth token obtained')
-    } else {
-      console.log(`Reddit OAuth failed: ${tokenRes.status}`)
-    }
-  } catch (e) {
-    console.error('Reddit OAuth error:', e)
-  }
-
-  const subreddits = ['aww', 'funnyanimals', 'AnimalsBeingDerps', 'rarepuppers', 'catvideos', 'dogvideos']
+  // Animal-only subreddits
+  const subreddits = [
+    'aww', 'AnimalsBeingDerps', 'rarepuppers', 'Zoomies',
+    'catvideos', 'dogvideos', 'AnimalsBeingBros',
+    'IllegallySmolCats', 'tippytaps', 'WhatsWrongWithYourDog',
+  ]
 
   for (const sub of subreddits) {
     try {
-      let res: Response
+      // Use public JSON endpoint (no auth needed)
+      const res = await fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=25&raw_json=1`, {
+        headers: { 'User-Agent': 'web:viralmascotas:v1.0 (by /u/viralmascotas)' },
+      })
 
-      if (accessToken) {
-        // Use OAuth API
-        res = await fetch(`https://oauth.reddit.com/r/${sub}/hot?limit=25&raw_json=1`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'User-Agent': 'web:viralmascotas:v1.0',
-          },
-        })
-      } else {
-        // Fallback: try RSS feed
-        res = await fetch(`https://www.reddit.com/r/${sub}/hot.rss?limit=25`, {
-          headers: { 'User-Agent': 'web:viralmascotas:v1.0' },
-        })
-
-        if (res.ok) {
-          console.log(`Reddit r/${sub}: RSS fallback used`)
-          // RSS doesn't give us structured video data, skip
-          continue
-        }
+      if (!res.ok) {
+        console.log(`Reddit r/${sub}: ${res.status}`)
         continue
       }
-
-      console.log(`Reddit r/${sub}: status ${res.status}`)
-      if (!res.ok) continue
 
       const json = await res.json()
       const children = json.data?.children || []
@@ -144,18 +118,24 @@ async function extraerRedditOAuth() {
         const post = child.data
         if (!post.url) continue
 
-        const isRedditVideo = post.url.includes('v.redd.it') || post.is_video
+        const isRedditVideo = post.is_video || post.url.includes('v.redd.it')
         const isYouTube = post.url.includes('youtube.com') || post.url.includes('youtu.be')
 
         if (!isRedditVideo && !isYouTube) continue
 
-        const thumbnail = (post.thumbnail && post.thumbnail.startsWith('http'))
+        // Get the proper video URL for Reddit hosted videos
+        let videoUrl = post.url
+        if (isRedditVideo && post.media?.reddit_video?.fallback_url) {
+          videoUrl = post.media.reddit_video.fallback_url
+        }
+
+        const thumbnail = (post.thumbnail?.startsWith('http'))
           ? post.thumbnail
-          : (post.preview?.images?.[0]?.source?.url || null)
+          : (post.preview?.images?.[0]?.source?.url?.replace(/&amp;/g, '&') || null)
 
         videos.push({
           titulo: post.title?.slice(0, 200) || 'Sin título',
-          url: post.url,
+          url: videoUrl,
           thumbnail,
           fuente: isYouTube ? 'youtube' : 'reddit',
           categoria: inferirCategoria(sub, post.title || ''),
@@ -166,31 +146,30 @@ async function extraerRedditOAuth() {
       console.error(`Error r/${sub}:`, e)
     }
   }
-  console.log(`Reddit total: ${videos.length} videos`)
+
+  console.log(`Reddit total: ${videos.length}`)
   return videos
 }
 
-// --- YouTube Scraper ---
+// --- YouTube ---
 async function extraerYouTube(apiKey: string) {
   const videos: any[] = []
 
   if (apiKey) {
-    // Try YouTube Data API
-    const queries = ['funny dogs', 'funny cats', 'cute pets', 'animales graciosos mascotas']
+    const queries = [
+      'funny dogs compilation', 'cute kittens playing', 'funny pets 2025',
+      'puppies doing funny things', 'cats being cats funny',
+    ]
     for (const q of queries) {
       try {
         const res = await fetch(
-          `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&maxResults=25&videoCategoryId=15&key=${apiKey}`
+          `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&maxResults=20&videoCategoryId=15&key=${apiKey}`
         )
-        console.log(`YouTube API "${q}": status ${res.status}`)
-        if (!res.ok) {
-          const err = await res.text()
-          console.error(`YouTube API error: ${err.substring(0, 200)}`)
-          continue
-        }
+        if (!res.ok) continue
         const json = await res.json()
         for (const item of json.items || []) {
           const title = item.snippet?.title || ''
+          if (!isAnimalContent(title)) continue
           videos.push({
             titulo: title.slice(0, 200),
             url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
@@ -206,33 +185,27 @@ async function extraerYouTube(apiKey: string) {
     }
   }
 
-  // If API didn't work, use YouTube RSS feeds from popular pet channels
+  // RSS fallback from animal-specific channels
   if (videos.length === 0) {
-    console.log('YouTube API unavailable, using RSS fallback')
+    console.log('Using YouTube RSS fallback')
     const channelIds = [
       'UCPIvT-zcQl2H0vabdXJGcpg', // The Dodo
-      'UC-RA5BzE_BnZhf5iVdNF1hA', // Funny Animals Life  
-      'UClFSU9_bUb4Rc6OYfTt5SPw', // Funny Pets
       'UCGi_crMdUZnrcsvkCa8pt-g', // Kritter Klub
       'UCH1oRy1wOXgUkKI0gCR1JtQ', // Dodo Kids
+      'UCVAKz2sYfQ4VW2FYRaBHUOg', // Funny Pet Videos
+      'UC7lIipCMwkdhOXBKyibd73Q', // Tucker Budzyn
     ]
 
     for (const channelId of channelIds) {
       try {
-        const res = await fetch(
-          `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`
-        )
-        console.log(`YouTube RSS channel ${channelId}: status ${res.status}`)
+        const res = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`)
         if (!res.ok) continue
-
         const xml = await res.text()
-        // Parse entries from XML
         const entries = xml.match(/<entry>[\s\S]*?<\/entry>/g) || []
 
         for (const entry of entries.slice(0, 10)) {
           const titleMatch = entry.match(/<title>([\s\S]*?)<\/title>/)
           const videoIdMatch = entry.match(/<yt:videoId>([\s\S]*?)<\/yt:videoId>/)
-
           if (titleMatch && videoIdMatch) {
             const title = titleMatch[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
             const videoId = videoIdMatch[1]
@@ -247,26 +220,26 @@ async function extraerYouTube(apiKey: string) {
           }
         }
       } catch (e) {
-        console.error(`YouTube RSS error:`, e)
+        console.error('YouTube RSS error:', e)
       }
     }
   }
 
-  console.log(`YouTube total: ${videos.length} videos`)
+  console.log(`YouTube total: ${videos.length}`)
   return videos
 }
 
 function inferirCategoria(subreddit: string, title: string): string {
   const sub = subreddit.toLowerCase()
-  if (sub.includes('dog') || sub.includes('pupper')) return 'perros'
-  if (sub.includes('cat')) return 'gatos'
+  if (sub.includes('dog') || sub.includes('pupper') || sub.includes('zoomies') || sub.includes('tippytaps')) return 'perros'
+  if (sub.includes('cat') || sub.includes('smolcats')) return 'gatos'
   return inferirCategoriaTexto(title)
 }
 
 function inferirCategoriaTexto(text: string): string {
   const t = text.toLowerCase()
-  if (t.includes('dog') || t.includes('puppy') || t.includes('perro') || t.includes('cachorro') || t.includes('pup')) return 'perros'
-  if (t.includes('cat') || t.includes('kitten') || t.includes('gato') || t.includes('gatito') || t.includes('kitty')) return 'gatos'
-  if (t.includes('parrot') || t.includes('hamster') || t.includes('rabbit') || t.includes('bird') || t.includes('turtle')) return 'otros'
+  if (t.includes('dog') || t.includes('puppy') || t.includes('perro') || t.includes('cachorro') || t.includes('pup') || t.includes('pupper') || t.includes('doggo')) return 'perros'
+  if (t.includes('cat') || t.includes('kitten') || t.includes('gato') || t.includes('gatito') || t.includes('kitty') || t.includes('feline')) return 'gatos'
+  if (t.includes('parrot') || t.includes('hamster') || t.includes('rabbit') || t.includes('bird') || t.includes('turtle') || t.includes('fish') || t.includes('bunny')) return 'otros'
   return 'curiosidades'
 }
