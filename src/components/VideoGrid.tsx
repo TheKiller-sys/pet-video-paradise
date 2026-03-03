@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useInView } from 'react-intersection-observer';
 import { Video, fetchVideos } from '@/lib/videoApi';
 import VideoCard from './VideoCard';
-import VideoModal from './VideoModal';
+import ReelsViewer from './ReelsViewer';
 import Loader from './Loader';
+import { AnimatePresence } from 'framer-motion';
 
 interface VideoGridProps {
   categoria?: string;
@@ -16,7 +17,7 @@ const VideoGrid = ({ categoria }: VideoGridProps) => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [reelIndex, setReelIndex] = useState<number | null>(null);
 
   const loadVideos = useCallback(async (pageNum: number, reset = false) => {
     try {
@@ -49,9 +50,18 @@ const VideoGrid = ({ categoria }: VideoGridProps) => {
     },
   });
 
+  const handleLoadMoreReels = useCallback(() => {
+    if (hasMore && !loading) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      loadVideos(nextPage);
+    }
+  }, [hasMore, loading, page, loadVideos]);
+
   const handlePlay = useCallback((video: Video) => {
-    setSelectedVideo(video);
-  }, []);
+    const idx = videos.findIndex(v => v.id === video.id);
+    setReelIndex(idx >= 0 ? idx : 0);
+  }, [videos]);
 
   if (loading && videos.length === 0) {
     return <Loader />;
@@ -79,7 +89,16 @@ const VideoGrid = ({ categoria }: VideoGridProps) => {
           <Loader />
         </div>
       )}
-      <VideoModal video={selectedVideo} onClose={() => setSelectedVideo(null)} />
+      <AnimatePresence>
+        {reelIndex !== null && (
+          <ReelsViewer
+            videos={videos}
+            startIndex={reelIndex}
+            onClose={() => setReelIndex(null)}
+            onLoadMore={handleLoadMoreReels}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 };
