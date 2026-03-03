@@ -1,1 +1,13 @@
 project_id = "bewcfbafbinhbukrrbpj"
+
+[functions.extraer-videos]
+verify_jwt = false
+
+[functions.like-video]
+verify_jwt = false
+
+[functions.get-videos]
+verify_jwt = false
+
+[functions.admin-videos]
+verify_jwt = false
